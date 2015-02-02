@@ -3,7 +3,7 @@ package memcache
 // A wrapper around bradfitz/gomemcache that provides compatability with libmemcache and python data types
 //
 // Key distribution is compatible with libmemcached and consistent ketama hashing
-// Values are interchangeable with Python datatypes (integer, string, unicode string) 
+// Values are interchangeable with Python datatypes (integer, string, unicode string)
 // as stored with https://pypi.python.org/pypi/pylibmc
 
 import (
