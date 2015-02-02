@@ -20,4 +20,9 @@ func TestGetSet(t *testing.T) {
 		t.Errorf("did't get unicode string back %v", v)
 	}
 
+	mc.Set(StringItem("str", u))
+	if v, ok := mc.GetString("str"); !ok || v != u {
+		t.Errorf("did't get string back %v", v)
+	}
+
 }
