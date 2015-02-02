@@ -1,0 +1,12 @@
+nguage: go
+go:
+  - 1.3.1
+  - 1.4.1
+services:
+  - memcached
+install:
+  - go get github.com/bradfitz/gomemcache/memcache
+  - go get github.com/dgryski/dgohash
+  - go get github.com/rckclmbr/goketama/ketama
+notifications:
+  email: false
