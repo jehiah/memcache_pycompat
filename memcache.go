@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"hash"
 	"strconv"
+	"errors"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dgryski/dgohash"
@@ -60,69 +61,102 @@ func NewClient(addresses []string) *Client {
 	return &Client{memcache.NewFromSelector(continuum)}
 }
 
+type Item struct {
+	*memcache.Item
+}
+
+var InvalidType error = errors.New("Invalid Value Type")
+
 // Get a cached string returning weather or not the get was successfull.
 func (c *Client) GetString(k string) (string, bool) {
 	i, err := c.Get(k)
 	if err == nil {
-		switch i.Flags {
-		case FLAG_PICKLE:
-			// Note: unicode objects get pickled, but parsing them is straight forward
-			//
-			// parsing is based on the following and only checks for protocol version 2
-			// - http://spootnik.org/entries/2014/04/05_diving-into-the-python-pickle-format.html
-			// - http://www.hydrogen18.com/blog/reading-pickled-data-in-go.html
-			// - https://github.com/hydrogen18/stalecucumber
-			//
-			// record format: (10 bytes in addition to the string)
-			// 2 pickle pre-amble - 0x80, 0x2 (pickle flag and version)
-			// 1 byte unicode opcode - 0x58
-			// 4 byte size - little endian
-			// ...
-			// 2 byte BINPUT 1 - 0x71, 0x1
-			// 1 byte stop opcode  - 0x2e
-			unicodePreamble := []byte{0x80, 0x2, 0x58}
-			if bytes.HasPrefix(i.Value, unicodePreamble) && len(i.Value) >= 10 {
-				size := binary.LittleEndian.Uint32(i.Value[3:])
-				if size+10 == uint32(len(i.Value)) {
-					return string(i.Value[7 : 7+size]), true
-				}
-			}
-		case FLAG_NONE:
-			return string(i.Value), true
+		s, err := (&Item{i}).String()
+		if err == nil {
+			return s, true
 		}
 	}
 	return "", false
+}
+
+// String returns the compatible python string value
+func (i *Item) String() (string, error) {
+	switch i.Flags {
+	case FLAG_PICKLE:
+		// Note: unicode objects get pickled, but parsing them is straight forward
+		//
+		// parsing is based on the following and only checks for protocol version 2
+		// - http://spootnik.org/entries/2014/04/05_diving-into-the-python-pickle-format.html
+		// - http://www.hydrogen18.com/blog/reading-pickled-data-in-go.html
+		// - https://github.com/hydrogen18/stalecucumber
+		//
+		// record format: (10 bytes in addition to the string)
+		// 2 pickle pre-amble - 0x80, 0x2 (pickle flag and version)
+		// 1 byte unicode opcode - 0x58
+		// 4 byte size - little endian
+		// ...
+		// 2 byte BINPUT 1 - 0x71, 0x1
+		// 1 byte stop opcode  - 0x2e
+		unicodePreamble := []byte{0x80, 0x2, 0x58}
+		if bytes.HasPrefix(i.Value, unicodePreamble) && len(i.Value) >= 10 {
+			size := binary.LittleEndian.Uint32(i.Value[3:])
+			if size+10 == uint32(len(i.Value)) {
+				return string(i.Value[7 : 7+size]), nil
+			}
+		}
+	case FLAG_NONE:
+		return string(i.Value), nil
+	}
+	return "", InvalidType
 }
 
 // Get a cached integer returning weather or not the get was successfull
 func (c *Client) GetInt64(k string) (int64, bool) {
 	i, err := c.Get(k)
 	if err == nil {
-		if i.Flags == FLAG_INTEGER {
-			n, err := strconv.ParseInt(string(i.Value), 10, 64)
-			if err == nil {
-				return n, true
-			}
+		n, err := (&Item{i}).Int64()
+		if err == nil {
+			return n, true
 		}
 	}
 	return 0, false
 }
 
-// GetBool returns boolean values or integer 0/1 as a boolean value.
-func (c *Client) GetBool(k string) (bool, bool) {
-	i, err := c.Get(k)
-	if err != nil {
-		return false, false
+// Int64 returns the compatable python int value
+func (i *Item) Int64() (int64, error) {
+	if i.Flags == FLAG_INTEGER {
+		n, err := strconv.ParseInt(string(i.Value), 10, 64)
+		if err == nil {
+			return n, nil
+		}
+		return 0, err
 	}
+	return 0, InvalidType
+}
+
+// Bool returns the python compatible boolean.
+func (i *Item) Bool() (bool, error) {
 	if i.Flags != FLAG_BOOL && i.Flags != FLAG_INTEGER {
-		return false, false
+		return false, InvalidType
 	}
 	// we allow the integer 0/1 values to be interpreted as boolean
 	s := string(i.Value)
 	if s == "0" {
-		return false, true
+		return false, nil
 	} else if s == "1" {
-		return true, true
+		return true, nil
+	}
+	return false, errors.New("Invalid Boolean Value")
+}
+
+// GetBool returns boolean values or integer 0/1 as a boolean value.
+func (c *Client) GetBool(k string) (bool, bool) {
+	i, err := c.Get(k)
+	if err == nil {
+		b, err := (&Item{i}).Bool()
+		if err == nil {
+			return b, true
+		}
 	}
 	return false, false
 }
