@@ -9,9 +9,9 @@ package memcache
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"hash"
 	"strconv"
-	"errors"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dgryski/dgohash"
@@ -28,7 +28,7 @@ const (
 	FLAG_BOOL    uint32 = 1 << 4 // This is a pylibmc addition
 )
 
-// a memcache Client with python/pylibmc/libmemcache compatability
+// Client wraps a memcache Client with python/pylibmc/libmemcache compatability
 type Client struct {
 	*memcache.Client
 }
@@ -47,7 +47,7 @@ type hostAddress struct {
 func (a *hostAddress) Network() string { return "tcp" }
 func (a *hostAddress) String() string  { return a.hostport }
 
-// return a memcache.Client with ketama consistent hashing (non-weighted)
+// NewClient returns a memcache.Client with ketama consistent hashing (non-weighted)
 func NewClient(addresses []string) *Client {
 	var servers []ketama.ServerInfo
 	for _, endpoint := range addresses {
@@ -67,7 +67,7 @@ type Item struct {
 
 var InvalidType error = errors.New("Invalid Value Type")
 
-// Get a cached string returning weather or not the get was successfull.
+// GetString gets k from cache returning weather or not the get was successfull.
 func (c *Client) GetString(k string) (string, bool) {
 	i, err := c.Get(k)
 	if err == nil {
@@ -110,7 +110,7 @@ func (i *Item) String() (string, error) {
 	return "", InvalidType
 }
 
-// Get a cached integer returning weather or not the get was successfull
+// GetInt64 gets an int64 from cache returning weather or not the get was successfull
 func (c *Client) GetInt64(k string) (int64, bool) {
 	i, err := c.Get(k)
 	if err == nil {
@@ -161,7 +161,7 @@ func (c *Client) GetBool(k string) (bool, bool) {
 	return false, false
 }
 
-// return a memcache.Item sutable for storing a utf-8 string
+// StringItem returns a memcache.Item sutable for storing a utf-8 string
 // this provides compatability with pylibmc
 func StringItem(k, s string) *memcache.Item {
 	return &memcache.Item{
@@ -171,7 +171,7 @@ func StringItem(k, s string) *memcache.Item {
 	}
 }
 
-// return a memcache.Item with a string stored as a python
+// UnicodeItem returns a memcache.Item with a string stored as a python
 // picked unicode object
 func UnicodeItem(k, s string) *memcache.Item {
 	size := len(s)
@@ -192,7 +192,7 @@ func UnicodeItem(k, s string) *memcache.Item {
 	}
 }
 
-// return a memcache.Item sutable for storing a boolean
+// BoolItem returns a memcache.Item sutable for storing a boolean
 // this provides compatability with pylibmc
 func BoolItem(k string, v bool) *memcache.Item {
 	value := "0"
@@ -206,7 +206,7 @@ func BoolItem(k string, v bool) *memcache.Item {
 	}
 }
 
-// return a memcache.Item sutable for storing an int64
+// Int64Item returns a memcache.Item sutable for storing an int64
 // this provides compatability with pylibmc
 func Int64Item(k string, v int64) *memcache.Item {
 	return &memcache.Item{
