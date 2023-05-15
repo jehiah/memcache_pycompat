@@ -2,5 +2,9 @@ github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b h1:L/QXpzIa3pO
 github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b/go.mod h1:H0wQNHz2YrLsuXOZozoeDmnHXkNCRmMW0gwFWDfEZDA=
 github.com/dgryski/dgohash v0.0.0-20181015193854-bc94635621ad h1:y+KtPFl9r8KnMm2Xb3jtVujm4Js3PhYLQ5qPLsyZl0Y=
 github.com/dgryski/dgohash v0.0.0-20181015193854-bc94635621ad/go.mod h1:5U7QOv6DFpngdeuj14yOvsehDGUGJSr9XPmYHdH097M=
+github.com/nlpodyssey/gopickle v0.3.0 h1:BLUE5gxFLyyNOPzlXxt6GoHEMMxD0qhsE4p0CIQyoLw=
+github.com/nlpodyssey/gopickle v0.3.0/go.mod h1:f070HJ/yR+eLi5WmM1OXJEGaTpuJEUiib19olXgYha0=
 github.com/rckclmbr/goketama v0.0.0-20181103001945-ac3ec91389c8 h1:cdqAI4nMyogkHOpUo+T/Gowz+B+20R9W/yzhKTFVp9Y=
 github.com/rckclmbr/goketama v0.0.0-20181103001945-ac3ec91389c8/go.mod h1:36E0jqCK+H1LXGERfZkLAymw60mJiZoK3nbSFpzgKPo=
+golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
+golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=

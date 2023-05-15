@@ -1,6 +1,6 @@
 package memcache
 
-// A wrapper around bradfitz/gomemcache that provides compatability with libmemcache and python data types
+// A wrapper around bradfitz/gomemcache that provides compatibility with libmemcache and python data types
 //
 // Key distribution is compatible with libmemcached and consistent ketama hashing
 // Values are interchangeable with Python datatypes (integer, string, unicode string)
@@ -12,23 +12,25 @@ import (
 	"errors"
 	"hash"
 	"strconv"
+	"strings"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/dgryski/dgohash"
+	"github.com/nlpodyssey/gopickle/pickle"
 	"github.com/rckclmbr/goketama/ketama"
 )
 
 // these flags match pylibmc in _pylibmcmodule.h
 const (
 	FLAG_NONE    uint32 = 0
-	FLAG_PICKLE  uint32 = 1 << 0 // note 'None' and unicoee types in python get set as pickled
+	FLAG_PICKLE  uint32 = 1 << 0 // note 'None' and unicode types in python get set as pickled
 	FLAG_INTEGER uint32 = 1 << 1
 	FLAG_LONG    uint32 = 1 << 2
 	FLAG_ZLIB    uint32 = 1 << 3
-	FLAG_BOOL    uint32 = 1 << 4 // This is a pylibmc addition
+	FLAG_BOOL    uint32 = 1 << 4 // https://github.com/lericson/pylibmc/issues/242
 )
 
-// Client wraps a memcache Client with python/pylibmc/libmemcache compatability
+// Client wraps a memcache Client with python/pylibmc/libmemcache compatibility
 type Client struct {
 	*memcache.Client
 }
@@ -67,7 +69,7 @@ type Item struct {
 
 var InvalidType error = errors.New("Invalid Value Type")
 
-// GetString gets k from cache returning weather or not the get was successfull.
+// GetString gets k from cache returning whether or not the get was successful
 func (c *Client) GetString(k string) (string, bool) {
 	i, err := c.Get(k)
 	if err == nil {
@@ -83,34 +85,25 @@ func (c *Client) GetString(k string) (string, bool) {
 func (i *Item) String() (string, error) {
 	switch i.Flags {
 	case FLAG_PICKLE:
-		// Note: unicode objects get pickled, but parsing them is straight forward
-		//
-		// parsing is based on the following and only checks for protocol version 2
-		// - http://spootnik.org/entries/2014/04/05_diving-into-the-python-pickle-format.html
-		// - http://www.hydrogen18.com/blog/reading-pickled-data-in-go.html
-		// - https://github.com/hydrogen18/stalecucumber
-		//
-		// record format: (10 bytes in addition to the string)
-		// 2 pickle pre-amble - 0x80, 0x2 (pickle flag and version)
-		// 1 byte unicode opcode - 0x58
-		// 4 byte size - little endian
-		// ...
-		// 2 byte BINPUT 1 - 0x71, 0x1
-		// 1 byte stop opcode  - 0x2e
-		unicodePreamble := []byte{0x80, 0x2, 0x58}
-		if bytes.HasPrefix(i.Value, unicodePreamble) && len(i.Value) >= 10 {
-			size := binary.LittleEndian.Uint32(i.Value[3:])
-			if size+10 == uint32(len(i.Value)) {
-				return string(i.Value[7 : 7+size]), nil
-			}
+		s, err := unpickle(string(i.Value))
+		if err != nil {
+			return "", err
 		}
+		return s.(string), nil
 	case FLAG_NONE:
+		if bytes.HasPrefix(i.Value, []byte{0x80, 0x2}) {
+			s, err := unpickle(string(i.Value))
+			if err != nil {
+				return "", err
+			}
+			return s.(string), nil
+		}
 		return string(i.Value), nil
 	}
 	return "", InvalidType
 }
 
-// GetInt64 gets an int64 from cache returning weather or not the get was successfull
+// GetInt64 gets an int64 from cache returning whether or not the get was successful
 func (c *Client) GetInt64(k string) (int64, bool) {
 	i, err := c.Get(k)
 	if err == nil {
@@ -122,9 +115,9 @@ func (c *Client) GetInt64(k string) (int64, bool) {
 	return 0, false
 }
 
-// Int64 returns the compatable python int value
+// Int64 returns the compatible python int value
 func (i *Item) Int64() (int64, error) {
-	if i.Flags == FLAG_INTEGER {
+	if i.Flags == FLAG_INTEGER || i.Flags == FLAG_LONG {
 		n, err := strconv.ParseInt(string(i.Value), 10, 64)
 		if err == nil {
 			return n, nil
@@ -139,6 +132,7 @@ func (i *Item) Bool() (bool, error) {
 	if i.Flags != FLAG_BOOL && i.Flags != FLAG_INTEGER {
 		return false, InvalidType
 	}
+
 	// we allow the integer 0/1 values to be interpreted as boolean
 	s := string(i.Value)
 	if s == "0" {
@@ -161,7 +155,7 @@ func (c *Client) GetBool(k string) (bool, bool) {
 	return false, false
 }
 
-// StringItem returns a memcache.Item sutable for storing a utf-8 string
+// StringItem returns a memcache.Item suitable for storing a utf-8 string
 // this provides compatability with pylibmc
 func StringItem(k, s string) *memcache.Item {
 	return &memcache.Item{
@@ -192,8 +186,11 @@ func UnicodeItem(k, s string) *memcache.Item {
 	}
 }
 
-// BoolItem returns a memcache.Item sutable for storing a boolean
+// BoolItem returns a memcache.Item suitable for storing a boolean
 // this provides compatability with pylibmc
+// to maintain compatibility between python2 and python3,
+// the values are pickled as True or False, rather than 1 or 0
+// In turn, go will unpickle this value whenever it is set.
 func BoolItem(k string, v bool) *memcache.Item {
 	value := "0"
 	if v {
@@ -214,4 +211,14 @@ func Int64Item(k string, v int64) *memcache.Item {
 		Value: []byte(strconv.FormatInt(v, 10)),
 		Flags: FLAG_INTEGER,
 	}
+}
+
+func unpickle(s string) (interface{}, error) {
+	pickledData := strings.NewReader(s)
+	unpickler := pickle.NewUnpickler(pickledData)
+	value, err := unpickler.Load()
+	if err != nil {
+		return "", err
+	}
+	return value, nil
 }
